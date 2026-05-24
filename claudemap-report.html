@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>claudemap — context report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+  :root{--bg:#0d0f12;--bg2:#13161b;--bg3:#1a1e25;--bg4:#222730;--border:#2a2f3a;--border2:#333a47;--text:#c8cdd8;--text2:#7a8296;--text3:#4a5168;--accent:#4f9eff;--accent2:#2563b8;--green:#3dba7a;--green2:#1d5c3c;--yellow:#e8b84b;--yellow2:#6b4e10;--red:#e85454;--red2:#5c1d1d;--purple:#a78bfa;--purple2:#3b2d6b;--dim:#3a4255;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;--radius:6px;--radius2:10px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;min-height:100vh}
+  .shell{display:grid;grid-template-columns:280px 1fr;grid-template-rows:52px 1fr;min-height:100vh}
+  .topbar{grid-column:1/-1;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px}
+  .topbar-logo{font-family:var(--mono);font-weight:600;font-size:16px;color:var(--accent);letter-spacing:-.3px}
+  .topbar-logo span{color:var(--text2);font-weight:400}
+  .topbar-path{font-family:var(--mono);font-size:13px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:3px 10px;flex:1}
+  .topbar-meta{display:flex;gap:8px;align-items:center}
+  .badge{font-family:var(--mono);font-size:12px;font-weight:500;padding:2px 8px;border-radius:99px;letter-spacing:.3px}
+  .badge-err{background:var(--red2);color:var(--red);border:1px solid var(--red)}
+  .badge-warn{background:var(--yellow2);color:var(--yellow);border:1px solid var(--yellow)}
+  .badge-info{background:var(--bg3);color:var(--text2);border:1px solid var(--border2)}
+  .badge-ok{background:var(--green2);color:var(--green);border:1px solid var(--green)}
+  .sidebar{background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;padding:16px 0}
+  .sidebar-section{margin-bottom:4px}
+  .sidebar-label{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);padding:8px 16px 4px}
+  .sidebar-item{display:flex;align-items:center;gap:8px;padding:6px 16px;cursor:pointer;border-left:2px solid transparent;transition:all .12s}
+  .sidebar-item:hover{background:var(--bg3)}
+  .sidebar-item.active{background:var(--bg3);border-left-color:var(--accent);color:var(--text)}
+  .sidebar-item .si-icon{font-size:11px;width:14px;text-align:center;flex-shrink:0}
+  .sidebar-item .si-label{font-family:var(--mono);font-size:13px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sidebar-item.active .si-label{color:var(--text)}
+  .sidebar-item .si-badge{font-family:var(--mono);font-size:11px;padding:1px 5px;border-radius:3px;flex-shrink:0}
+  .si-badge-e{background:var(--red2);color:var(--red)}
+  .si-badge-w{background:var(--yellow2);color:var(--yellow)}
+  .si-badge-i{background:var(--bg4);color:var(--text3)}
+  .si-badge-ok{background:var(--green2);color:var(--green)}
+  .main{overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);overflow:hidden}
+  .card-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg3)}
+  .card-title{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.4px;color:var(--text);flex:1}
+  .card-sub{font-size:13px;color:var(--text3)}
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
+  .summary-cell{background:var(--bg2);padding:18px 20px;display:flex;flex-direction:column;gap:4px}
+  .sc-value{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1}
+  .sc-label{font-size:13px;color:var(--text3);font-family:var(--mono)}
+  .sc-sub{font-size:12px;color:var(--text3);font-family:var(--mono)}
+  .sc-err{color:var(--red)}.sc-warn{color:var(--yellow)}.sc-accent{color:var(--accent)}.sc-green{color:var(--green)}
+  .token-bar-wrap{padding:16px;display:flex;flex-direction:column;gap:10px}
+  .token-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--bg4);gap:1px}
+  .tb-seg{height:100%}
+  .token-legend{display:flex;flex-wrap:wrap;gap:10px 20px}
+  .tl-item{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--text2)}
+  .tl-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+  .tl-tokens{color:var(--text3);margin-left:2px}
+  .tree{padding:8px 0}
+  .tree-row-inner{display:flex;align-items:center;gap:8px;flex:1;padding:5px 16px;border-radius:var(--radius);margin:1px 8px;transition:background .1s}
+  .tree-row-inner:hover{background:var(--bg3)}
+  .tree-order{font-family:var(--mono);font-size:11px;color:var(--text3);background:var(--bg4);border:1px solid var(--border);border-radius:3px;padding:1px 5px;min-width:32px;text-align:center;flex-shrink:0}
+  .tree-icon{font-size:14px;flex-shrink:0}
+  .tree-name{font-family:var(--mono);font-size:13px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tree-scope{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:3px;flex-shrink:0}
+  .scope-managed{background:var(--purple2);color:var(--purple)}
+  .scope-user{background:var(--bg4);color:var(--text3);border:1px solid var(--border2)}
+  .scope-project{background:var(--accent2);color:var(--accent)}
+  .scope-local{background:var(--bg4);color:var(--text3);border:1px solid var(--border2)}
+  .scope-lazy{background:var(--bg4);color:var(--dim);border:1px solid var(--border)}
+  .scope-rule{background:var(--green2);color:var(--green)}
+  .tree-timing{font-family:var(--mono);font-size:11px;color:var(--text3);flex-shrink:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tree-lines{font-family:var(--mono);font-size:12px;color:var(--text3);flex-shrink:0;min-width:52px;text-align:right}
+  .tree-tokens{font-family:var(--mono);font-size:12px;color:var(--text3);flex-shrink:0;min-width:64px;text-align:right}
+  .tree-findings{display:flex;gap:4px;flex-shrink:0;min-width:20px}
+  .tf-dot{width:6px;height:6px;border-radius:50%;margin-top:1px}
+  .tf-dot-e{background:var(--red)}.tf-dot-w{background:var(--yellow)}.tf-dot-i{background:var(--text3)}
+  .tree-import-row{display:flex;align-items:center;gap:8px;padding:3px 16px 3px 52px;margin:0 8px}
+  .import-arrow{font-family:var(--mono);font-size:11px;color:var(--text3);flex-shrink:0}
+  .import-name{font-family:var(--mono);font-size:12px;color:var(--text2);flex:1}
+  .import-depth{font-family:var(--mono);font-size:11px;color:var(--text3);background:var(--bg4);border:1px solid var(--border);border-radius:3px;padding:1px 5px}
+  .import-error{color:var(--red)}.import-ok{color:var(--text3)}
+  .tree-section-divider{display:flex;align-items:center;gap:10px;padding:10px 16px 6px;margin-top:4px}
+  .tsd-label{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text3);white-space:nowrap}
+  .tsd-line{height:1px;background:var(--border);flex:1}
+  .findings-list{display:flex;flex-direction:column}
+  .finding-item{display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:background .1s}
+  .finding-item:last-child{border-bottom:none}
+  .finding-item:hover{background:var(--bg3)}
+  .finding-sev{width:32px;flex-shrink:0;display:flex;align-items:flex-start;padding-top:2px}
+  .sev-icon{font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 6px;border-radius:3px;letter-spacing:.3px}
+  .sev-e{background:var(--red2);color:var(--red);border:1px solid var(--red)}
+  .sev-w{background:var(--yellow2);color:var(--yellow);border:1px solid var(--yellow)}
+  .sev-i{background:var(--bg4);color:var(--text3);border:1px solid var(--border2)}
+  .finding-body{flex:1;min-width:0}
+  .finding-code{font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:3px}
+  .finding-msg{font-size:14px;color:var(--text);margin-bottom:5px;line-height:1.4}
+  .finding-file{font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:5px}
+  .finding-detail{font-size:13px;color:var(--text2);line-height:1.5;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-top:6px;font-family:var(--mono)}
+  .compose-block{border-bottom:1px solid var(--border)}
+  .compose-block:last-child{border-bottom:none}
+  .compose-header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+  .compose-header:hover{background:var(--bg4)}
+  .ch-order{font-family:var(--mono);font-size:11px;color:var(--text3);background:var(--bg4);border:1px solid var(--border);border-radius:3px;padding:1px 5px;min-width:26px;text-align:center}
+  .ch-file{font-family:var(--mono);font-size:13px;color:var(--text);flex:1}
+  .ch-tokens{font-family:var(--mono);font-size:12px;color:var(--text3)}
+  .ch-toggle{font-size:10px;color:var(--text3);transition:transform .15s}
+  .compose-content{padding:0;display:none}
+  .compose-content.open{display:block}
+  .compose-content pre{font-family:var(--mono);font-size:13px;color:var(--text2);line-height:1.6;padding:14px 16px;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--bg3);padding:0 16px}
+  .tab{font-family:var(--mono);font-size:13px;color:var(--text3);padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .1s;user-select:none}
+  .tab:hover{color:var(--text2)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+  @media(max-width:768px){.shell{grid-template-columns:1fr}.sidebar{display:none}.summary-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header class="topbar">
+  <div class="topbar-logo">claudemap <span>v0.1.0</span></div>
+  <div class="topbar-path">/Users/alonw/projects/playground/claudemap/testdata/simple</div>
+  <div class="topbar-meta">
+    <span class="badge badge-err">1 error</span>
+    <span class="badge badge-warn">1 warning</span>
+    <span class="badge badge-info">1 info</span>
+    
+  </div>
+</header>
+
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Views</div>
+    <div class="sidebar-item active" onclick="showView('overview')">
+      <span class="si-icon">◈</span><span class="si-label">Overview</span>
+    </div>
+    <div class="sidebar-item" onclick="showView('tree')">
+      <span class="si-icon">⊞</span><span class="si-label">Context Tree</span>
+    </div>
+    <div class="sidebar-item" onclick="showView('compose')">
+      <span class="si-icon">≡</span><span class="si-label">Composed Context</span>
+    </div>
+    <div class="sidebar-item" onclick="showView('findings')">
+      <span class="si-icon">◎</span><span class="si-label">Findings</span>
+      
+      <span class="si-badge si-badge-e">3</span>
+      
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Files — Eager</div>
+    
+    <div class="sidebar-item" onclick="showCompose( 0 )">
+      <span class="si-icon" style="color:var(--accent)">●</span>
+      <span class="si-label">~/.claude/CLAUDE.md</span>
+      <span class="si-badge si-badge-ok">~0</span>
+    </div>
+    
+    <div class="sidebar-item" onclick="showCompose( 1 )">
+      <span class="si-icon" style="color:var(--accent)">●</span>
+      <span class="si-label">~/projects/playground/claudemap/CLAUDE.md</span>
+      <span class="si-badge si-badge-ok">~795</span>
+    </div>
+    
+    <div class="sidebar-item" onclick="showCompose( 2 )">
+      <span class="si-icon" style="color:var(--accent)">●</span>
+      <span class="si-label">~/projects/playground/claudemap/testdata/simple/CLAUDE.md</span>
+      <span class="si-badge si-badge-ok">~47</span>
+    </div>
+    
+  </div>
+  
+  <div class="sidebar-section">
+    <div class="sidebar-label">Files — Lazy</div>
+    
+    <div class="sidebar-item" onclick="showView('tree')">
+      <span class="si-icon" style="color:var(--dim)">○</span>
+      <span class="si-label">~/projects/playground/claudemap/testdata/simple/.claude/rules/testing.md</span>
+      <span class="si-badge si-badge-i">rule</span>
+    </div>
+    
+    <div class="sidebar-item" onclick="showView('tree')">
+      <span class="si-icon" style="color:var(--dim)">○</span>
+      <span class="si-label">~/projects/playground/claudemap/testdata/simple/src/api/CLAUDE.md</span>
+      <span class="si-badge si-badge-i">dir</span>
+    </div>
+    
+  </div>
+  
+</nav>
+
+<main class="main">
+
+
+<div id="view-overview">
+  <div class="card">
+    <div class="summary-grid">
+      <div class="summary-cell">
+        <div class="sc-value sc-accent">~842</div>
+        <div class="sc-label">eager tokens</div>
+        <div class="sc-sub">across 3 files</div>
+      </div>
+      <div class="summary-cell">
+        <div class="sc-value" style="color:var(--text)">58</div>
+        <div class="sc-label">eager lines</div>
+        <div class="sc-sub">loaded at session start</div>
+      </div>
+      <div class="summary-cell">
+        <div class="sc-value sc-warn">1</div>
+        <div class="sc-label">warnings</div>
+        <div class="sc-sub">run check for details</div>
+      </div>
+      <div class="summary-cell">
+        <div class="sc-value sc-err">1</div>
+        <div class="sc-label">errors</div>
+        <div class="sc-sub">action required</div>
+      </div>
+    </div>
+    
+    <div class="token-bar-wrap">
+      <div class="token-bar">
+        <div class="tb-seg" style="flex-basis:0.0%;background:#7c5caf;"></div><div class="tb-seg" style="flex-basis:94.4%;background:#2563b8;"></div><div class="tb-seg" style="flex-basis:5.6%;background:#1d6b4a;"></div>
+      </div>
+      <div class="token-legend">
+        
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#7c5caf;"></div>
+          ~/.claude/CLAUDE.md <span class="tl-tokens">~0</span>
+        </div>
+        
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#2563b8;"></div>
+          ~/projects/playground/claudemap/CLAUDE.md <span class="tl-tokens">~795</span>
+        </div>
+        
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#1d6b4a;"></div>
+          CLAUDE.md <span class="tl-tokens">~47</span>
+        </div>
+        
+      </div>
+    </div>
+    
+  </div>
+
+  
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">FINDINGS</div>
+      <div class="card-sub">3 total</div>
+    </div>
+    <div class="findings-list">
+      
+      <div class="finding-item">
+        <div class="finding-sev"><span class="sev-icon sev-e">ERR</span></div>
+        <div class="finding-body">
+          <div class="finding-code">broken-import</div>
+          <div class="finding-msg">@path` → file not found</div>
+          <div class="finding-file">../../CLAUDE.md : line 24</div>
+          
+        </div>
+      </div>
+      
+      <div class="finding-item">
+        <div class="finding-sev"><span class="sev-icon sev-w">WRN</span></div>
+        <div class="finding-body">
+          <div class="finding-code">dead-rule</div>
+          <div class="finding-msg">paths: [**/*.test.ts] matches 0 files in this tree</div>
+          <div class="finding-file">.claude/rules/testing.md</div>
+          <div class="finding-detail">This rule never loads. Remove it or update the glob.</div>
+        </div>
+      </div>
+      
+      <div class="finding-item">
+        <div class="finding-sev"><span class="sev-icon sev-i">INF</span></div>
+        <div class="finding-body">
+          <div class="finding-code">post-compaction-risk</div>
+          <div class="finding-msg">rules in this file vanish after /compact until Claude opens a file in this directory</div>
+          <div class="finding-file">src/api/CLAUDE.md</div>
+          <div class="finding-detail">Consider duplicating critical rules into the nearest eager CLAUDE.md</div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  
+</div>
+
+
+<div id="view-tree" style="display:none;">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">CONTEXT TREE</div>
+      <div class="card-sub">load order → /Users/alonw/projects/playground/claudemap/testdata/simple</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);background:var(--bg3);">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.8px;flex:1;padding-left:44px;">FILE</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);width:70px;text-align:right;">SCOPE</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);width:80px;text-align:right;">TIMING</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);width:48px;text-align:right;">LINES</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);width:64px;text-align:right;">TOKENS</div>
+      <div style="width:24px;"></div>
+    </div>
+    <div class="tree">
+      <div class="tree-section-divider">
+        <span class="tsd-label">Eager — loads at session start</span>
+        <span class="tsd-line"></span>
+      </div>
+      
+      
+      
+      <div class="tree-node">
+        <div class="tree-row-inner">
+          <div class="tree-order">#1</div>
+          <div class="tree-name" title="/Users/alonw/.claude/CLAUDE.md">~/.claude/CLAUDE.md</div>
+          <div class="tree-scope scope-user" style="margin-left:auto;">user</div>
+          <div class="tree-timing" style="width:80px;text-align:right;">eager</div>
+          <div class="tree-lines" >0L</div>
+          <div class="tree-tokens">~0</div>
+          <div class="tree-findings">
+            
+          </div>
+        </div>
+        
+      </div>
+      
+      
+      
+      <div class="tree-node">
+        <div class="tree-row-inner">
+          <div class="tree-order">#2</div>
+          <div class="tree-name" title="/Users/alonw/projects/playground/claudemap/CLAUDE.md">~/projects/playground/claudemap/CLAUDE.md</div>
+          <div class="tree-scope scope-project" style="margin-left:auto;">project</div>
+          <div class="tree-timing" style="width:80px;text-align:right;">eager</div>
+          <div class="tree-lines" >46L</div>
+          <div class="tree-tokens">~795</div>
+          <div class="tree-findings">
+            
+            <div class="tf-dot tf-dot-e" title="broken-import: @path` → file not found"></div>
+            
+          </div>
+        </div>
+        
+        <div class="tree-import-row">
+          <div class="import-arrow">↳</div>
+          
+          <div class="import-name" style="color:var(--red);">@path`</div>
+          <div class="import-depth" style="color:var(--red);border-color:var(--red);">depth:1</div>
+          <div class="import-arrow import-error">✗ not found</div>
+          
+        </div>
+        
+      </div>
+      
+      
+      
+      <div class="tree-node">
+        <div class="tree-row-inner">
+          <div class="tree-order">#3</div>
+          <div class="tree-name" title="/Users/alonw/projects/playground/claudemap/testdata/simple/CLAUDE.md">~/projects/playground/claudemap/testdata/simple/CLAUDE.md</div>
+          <div class="tree-scope scope-project" style="margin-left:auto;">project</div>
+          <div class="tree-timing" style="width:80px;text-align:right;">eager</div>
+          <div class="tree-lines" >12L</div>
+          <div class="tree-tokens">~47</div>
+          <div class="tree-findings">
+            
+          </div>
+        </div>
+        
+      </div>
+      
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border);background:var(--bg3);margin-top:4px;">
+        <div style="flex:1;font-family:var(--mono);font-size:10px;color:var(--text3);">TOTAL EAGER</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text);width:48px;text-align:right;font-weight:500;">58L</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--accent);width:64px;text-align:right;font-weight:500;">~842</div>
+        <div style="width:24px;"></div>
+      </div>
+      
+      <div class="tree-section-divider" style="margin-top:8px;">
+        <span class="tsd-label">Lazy — loads when matching files opened</span>
+        <span class="tsd-line"></span>
+      </div>
+      
+      
+      
+      <div class="tree-node">
+        <div class="tree-row-inner" style="opacity:.7;">
+          <div class="tree-order" style="color:var(--red);border-color:var(--red);">rule</div>
+          <div class="tree-name" style="color:var(--red);" title="/Users/alonw/projects/playground/claudemap/testdata/simple/.claude/rules/testing.md">~/projects/playground/claudemap/testdata/simple/.claude/rules/testing.md</div>
+          <div class="tree-scope scope-rule" style="background:var(--red2);color:var(--red);border:1px solid var(--red);margin-left:auto;">rule</div>
+          <div class="tree-timing" style="width:80px;text-align:right;color:var(--red);">**/*.test.ts</div>
+          <div class="tree-lines" style="color:var(--text3);">10L</div>
+          <div class="tree-tokens" style="color:var(--text3);">~35</div>
+          <div class="tree-findings">
+            
+            <div class="tf-dot tf-dot-w" title="dead-rule: paths: [**/*.test.ts] matches 0 files in this tree"></div>
+            
+          </div>
+        </div>
+      </div>
+      
+      
+      
+      <div class="tree-node">
+        <div class="tree-row-inner" >
+          <div class="tree-order" >dir</div>
+          <div class="tree-name"  title="/Users/alonw/projects/playground/claudemap/testdata/simple/src/api/CLAUDE.md">~/projects/playground/claudemap/testdata/simple/src/api/CLAUDE.md</div>
+          <div class="tree-scope scope-lazy" style="margin-left:auto;">subdir</div>
+          <div class="tree-timing" style="width:80px;text-align:right;">on dir open</div>
+          <div class="tree-lines" style="color:var(--text3);">5L</div>
+          <div class="tree-tokens" style="color:var(--text3);">~35</div>
+          <div class="tree-findings">
+            
+            <div class="tf-dot tf-dot-i" title="post-compaction-risk: rules in this file vanish after /compact until Claude opens a file in this directory"></div>
+            
+          </div>
+        </div>
+      </div>
+      
+      
+    </div>
+  </div>
+</div>
+
+
+<div id="view-compose" style="display:none;">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">COMPOSED EAGER CONTEXT</div>
+      <div class="card-sub">~842 tokens · 3 blocks · as Claude receives it</div>
+    </div>
+    
+    <div class="compose-block" id="compose-block-0">
+      <div class="compose-header" onclick="toggleCompose(this)">
+        <div class="ch-order">#1</div>
+        <div class="ch-file">~/.claude/CLAUDE.md <span style="color:var(--text3);font-size:9px;margin-left:6px;">user</span></div>
+        <div class="ch-tokens">~0 tokens</div>
+        <div class="ch-toggle">▶</div>
+      </div>
+      <div class="compose-content">
+        <pre></pre>
+      </div>
+    </div>
+    
+    <div class="compose-block" id="compose-block-1">
+      <div class="compose-header" onclick="toggleCompose(this)">
+        <div class="ch-order">#2</div>
+        <div class="ch-file">~/projects/playground/claudemap/CLAUDE.md <span style="color:var(--text3);font-size:9px;margin-left:6px;">project</span></div>
+        <div class="ch-tokens">~795 tokens</div>
+        <div class="ch-toggle">▶</div>
+      </div>
+      <div class="compose-content">
+        <pre># CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+go build -o claudemap .        # build binary
+go run . map                   # run without building
+go test ./...                  # run all tests
+go test ./analyze/...          # run a single package&#39;s tests
+go test -run TestGlobMatch ./analyze/  # run a single test
+go mod tidy                    # sync go.mod/go.sum after dep changes
+```
+
+## Architecture
+
+The pipeline is: **Discover → Analyze → Render**, wired together by the cobra commands in `cmd/`.
+
+**`model/model.go`** — all shared types. Read this first. Key types: `ClaudeFile` (one discovered file), `ContextAssembly` (the full result of discovery: eager &#43; lazy files, composed blocks), `Finding` (a single issue). Everything else is built on these.
+
+**`discover/`** — builds the `ContextAssembly` from disk.
+- `discover.go`: orchestrates upward walk (workdir → root), user-level files (`~/.claude/`), managed policy, downward walk for lazy-dir files, and rules discovery. Deduplication via `seenPaths` prevents `~/.claude/CLAUDE.md` from appearing twice when the upward walk passes through home.
+- `imports.go`: resolves `@path` references recursively, tracking depth (max 5) and circular refs via a seen-set.
+- `platform.go`: returns the OS-specific managed policy path.
+
+**`analyze/`** — stateless functions operating on `ContextAssembly`.
+- `tokens.go`: `EstimateTokens` and `StripHTMLComments` (strips `` outside code blocks using placeholder substitution).
+- `glob.go`: inline `**`-aware glob matcher (no external dep). Used for W02 dead-rule detection and simulate mode.
+- `check.go`: all 9 issue detectors (E01–I03). Each detector iterates the assembly and appends `Finding` values.
+
+**`render/`** — three output formats, all taking `(*ContextAssembly, []Finding)`.
+- `terminal.go`: ANSI-colored tree. `NO_COLOR` / non-TTY detection strips colors.
+- `json.go`: defines `Version` constant (single source of truth). Serializes to the SPEC §8 schema.
+- `html.go`: single-function `HTML(...)` that templates the 4-panel dark-theme report (Overview / Context Tree / Composed Context / Findings) into a self-contained HTML file. The template is an inline string constant at the bottom of the file.
+
+**`cmd/`** — cobra commands that wire the pipeline.
+- `check.go`: runs discovery &#43; checks, then branches on `--json` / `--quiet` / `--report html`. Calls `os.Exit` with code 0/1/2.
+- `map.go`: runs discovery, renders terminal tree, handles `--compose` and `--simulate-open`. `collectSimulateFiles` computes which lazy files activate for the target path.
+
+## Key conventions
+
+- **Version** lives only in `render/json.go` as `const Version`.
+- **Exit codes**: 0 = clean, 1 = info only, 2 = warning or error. Set via `os.Exit` in `cmd/check.go`.
+- Load order: managed policy = 0, user files start at 1, ancestor files are collected then reversed (root-first) before assigning sequential order numbers.
+- Lazy files never get a `LoadOrder`; they&#39;re identified by `LoadTiming == LoadLazyDir` or `LoadLazyRule`.
+</pre>
+      </div>
+    </div>
+    
+    <div class="compose-block" id="compose-block-2">
+      <div class="compose-header" onclick="toggleCompose(this)">
+        <div class="ch-order">#3</div>
+        <div class="ch-file">~/projects/playground/claudemap/testdata/simple/CLAUDE.md <span style="color:var(--text3);font-size:9px;margin-left:6px;">project</span></div>
+        <div class="ch-tokens">~47 tokens</div>
+        <div class="ch-toggle">▶</div>
+      </div>
+      <div class="compose-content">
+        <pre># Project Guidelines
+
+- Use TypeScript strict mode
+- Run tests before committing
+- Follow the naming conventions in docs/conventions.md
+
+## Build
+
+```bash
+npm run build
+npm test
+```
+</pre>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+
+<div id="view-findings" style="display:none;">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">ALL FINDINGS</div>
+      <div class="card-sub">1 error · 1 warning · 1 info</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" onclick="filterFindings('all',this)">All (3)</div>
+      <div class="tab" onclick="filterFindings('error',this)">Errors (1)</div>
+      <div class="tab" onclick="filterFindings('warning',this)">Warnings (1)</div>
+      <div class="tab" onclick="filterFindings('info',this)">Info (1)</div>
+    </div>
+    <div class="findings-list" id="findings-list">
+      
+      <div class="finding-item" data-sev="error">
+        <div class="finding-sev"><span class="sev-icon sev-e">ERR</span></div>
+        <div class="finding-body">
+          <div class="finding-code">broken-import</div>
+          <div class="finding-msg">@path` → file not found</div>
+          <div class="finding-file">../../CLAUDE.md : line 24</div>
+          
+        </div>
+      </div>
+      
+      <div class="finding-item" data-sev="warning">
+        <div class="finding-sev"><span class="sev-icon sev-w">WRN</span></div>
+        <div class="finding-body">
+          <div class="finding-code">dead-rule</div>
+          <div class="finding-msg">paths: [**/*.test.ts] matches 0 files in this tree</div>
+          <div class="finding-file">.claude/rules/testing.md</div>
+          <div class="finding-detail">This rule never loads. Remove it or update the glob.</div>
+        </div>
+      </div>
+      
+      <div class="finding-item" data-sev="info">
+        <div class="finding-sev"><span class="sev-icon sev-i">INF</span></div>
+        <div class="finding-body">
+          <div class="finding-code">post-compaction-risk</div>
+          <div class="finding-msg">rules in this file vanish after /compact until Claude opens a file in this directory</div>
+          <div class="finding-file">src/api/CLAUDE.md</div>
+          <div class="finding-detail">Consider duplicating critical rules into the nearest eager CLAUDE.md</div>
+        </div>
+      </div>
+      
+      
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+const views=['overview','tree','compose','findings'];
+function showView(name){
+  views.forEach(v=>{
+    document.getElementById('view-'+v).style.display=(v===name)?'':'none';
+  });
+  document.querySelectorAll('.sidebar-item').forEach(el=>{
+    el.classList.toggle('active',el.getAttribute('onclick')===("showView('"+name+"')"));
+  });
+}
+function showCompose(idx){
+  showView('compose');
+  
+  document.querySelectorAll('.compose-block').forEach(b=>{
+    b.querySelector('.compose-content').classList.remove('open');
+    b.querySelector('.ch-toggle').textContent='▶';
+  });
+  
+  const block=document.getElementById('compose-block-'+idx);
+  if(!block) return;
+  block.querySelector('.compose-content').classList.add('open');
+  block.querySelector('.ch-toggle').textContent='▼';
+  block.scrollIntoView({behavior:'smooth',block:'start'});
+  document.querySelectorAll('.sidebar-item').forEach(el=>{
+    el.classList.toggle('active',el.getAttribute('onclick')===('showCompose('+idx+')'));
+  });
+}
+function toggleCompose(header){
+  const content=header.nextElementSibling;
+  const toggle=header.querySelector('.ch-toggle');
+  const isOpen=content.classList.toggle('open');
+  toggle.textContent=isOpen?'▼':'▶';
+}
+function filterFindings(sev,tabEl){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  tabEl.classList.add('active');
+  document.querySelectorAll('#findings-list .finding-item').forEach(item=>{
+    item.style.display=(sev==='all'||item.dataset.sev===sev)?'':'none';
+  });
+}
+</script>
+</body>
+</html>
