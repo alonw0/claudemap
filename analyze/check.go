@@ -134,14 +134,23 @@ func RunChecks(assembly *model.ContextAssembly, workdir string) []model.Finding 
 	}
 
 	// I03 — dead-exclude (claudeMdExcludes in settings.json)
+	// Patterns match absolute paths per Claude Code docs.
 	allDiscoveredPaths := make([]string, 0, len(allFiles))
 	for _, f := range allFiles {
-		allDiscoveredPaths = append(allDiscoveredPaths, filepath.ToSlash(f.RelPath))
+		allDiscoveredPaths = append(allDiscoveredPaths, filepath.ToSlash(f.Path))
 	}
-	for _, settingsFile := range []string{
+	var settingsFiles []string
+	if home, _ := os.UserHomeDir(); home != "" {
+		settingsFiles = append(settingsFiles,
+			filepath.Join(home, ".claude", "settings.json"),
+			filepath.Join(home, ".claude", "settings.local.json"),
+		)
+	}
+	settingsFiles = append(settingsFiles,
 		filepath.Join(workdir, ".claude", "settings.json"),
 		filepath.Join(workdir, ".claude", "settings.local.json"),
-	} {
+	)
+	for _, settingsFile := range settingsFiles {
 		checkDeadExcludes(settingsFile, workdir, allDiscoveredPaths, allFiles, &findings, newFinding)
 	}
 

@@ -72,8 +72,14 @@ func Discover(workdir string, opts Opts) (*model.ContextAssembly, error) {
 		seenPaths[f.Path] = true
 	}
 
-	// Upward walk: workdir → filesystem root
-	var ancestorFiles []model.ClaudeFile
+	// Upward walk: collect directory groups from workdir → root, then reverse groups
+	// so root-level files get lower load-order numbers. Within each group, preserve
+	// collection order so CLAUDE.md < CLAUDE.local.md < .claude/CLAUDE.md < .claude/CLAUDE.local.md.
+	type dirGroup struct {
+		files []model.ClaudeFile
+	}
+	var dirGroups []dirGroup
+
 	dir := workdir
 	for {
 		candidates := []struct {
@@ -85,6 +91,7 @@ func Discover(workdir string, opts Opts) (*model.ContextAssembly, error) {
 			{filepath.Join(".claude", "CLAUDE.md"), model.ScopeProjectRoot},
 			{filepath.Join(".claude", "CLAUDE.local.md"), model.ScopeProjectLocal},
 		}
+		var group dirGroup
 		for _, c := range candidates {
 			p := filepath.Join(dir, c.name)
 			absP, _ := filepath.Abs(p)
@@ -95,8 +102,11 @@ func Discover(workdir string, opts Opts) (*model.ContextAssembly, error) {
 				f.Scope = c.scope
 				f.LoadTiming = model.LoadEager
 				seenPaths[absP] = true
-				ancestorFiles = append(ancestorFiles, f)
+				group.files = append(group.files, f)
 			}
+		}
+		if len(group.files) > 0 {
+			dirGroups = append(dirGroups, group)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -105,15 +115,17 @@ func Discover(workdir string, opts Opts) (*model.ContextAssembly, error) {
 		dir = parent
 	}
 
-	// Reverse: root-first, closer-to-workdir last (higher precedence)
-	for i, j := 0, len(ancestorFiles)-1; i < j; i, j = i+1, j-1 {
-		ancestorFiles[i], ancestorFiles[j] = ancestorFiles[j], ancestorFiles[i]
+	// Reverse groups only — within each group, order is preserved (CLAUDE.md before CLAUDE.local.md)
+	for i, j := 0, len(dirGroups)-1; i < j; i, j = i+1, j-1 {
+		dirGroups[i], dirGroups[j] = dirGroups[j], dirGroups[i]
 	}
-	for i := range ancestorFiles {
-		ancestorFiles[i].LoadOrder = orderSeq
-		orderSeq++
+	for _, g := range dirGroups {
+		for _, f := range g.files {
+			f.LoadOrder = orderSeq
+			orderSeq++
+			assembly.EagerFiles = append(assembly.EagerFiles, f)
+		}
 	}
-	assembly.EagerFiles = append(assembly.EagerFiles, ancestorFiles...)
 
 	// Project rules ./.claude/rules/*.md
 	projectRulesDir := filepath.Join(workdir, ".claude", "rules")
@@ -316,6 +328,11 @@ func walkSubdirs(workdir string, opts Opts) ([]model.ClaudeFile, error) {
 		if d.IsDir() {
 			name := d.Name()
 			if defaultIgnoreDirs[name] {
+				return filepath.SkipDir
+			}
+			// workdir's own .claude/ is handled by the upward walk and rules discovery;
+			// skip it here to avoid double-counting workdir/.claude/CLAUDE.md as lazy.
+			if name == ".claude" && filepath.Dir(path) == workdir {
 				return filepath.SkipDir
 			}
 			if ignorer != nil {
