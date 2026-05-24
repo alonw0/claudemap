@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# claudemap-suggest-updates — Stop hook script.
+# Runs after each Claude Code session. If new ERR/WARN findings appeared since
+# the last baseline, writes a pending message that the Start hook injects at
+# the beginning of the next session.
+#
+# Usage: add to .claude/settings.json Stop hooks (see docs/hooks.md)
+
+set -euo pipefail
+
+BASELINE=".claude/claudemap-baseline.json"
+PENDING=".claude/claudemap-pending.md"
+
+# Run claudemap; if not installed, exit silently
+if ! command -v claudemap &>/dev/null; then
+  exit 0
+fi
+
+current=$(claudemap check --json 2>/dev/null) || current=''
+if [ -z "$current" ]; then
+  exit 0
+fi
+
+# Extract ERR+WARN findings as a sorted list of "code:file_path" strings
+current_issues=$(echo "$current" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+issues = sorted(
+    f\"{f['severity']}:{f['code']}:{f['file_path']}\"
+    for f in d.get('findings', [])
+    if f['severity'] in ('error', 'warning')
+)
+print('\n'.join(issues))
+" 2>/dev/null) || current_issues=''
+
+# Load baseline (empty if none)
+baseline_issues=''
+if [ -f "$BASELINE" ]; then
+  baseline_issues=$(python3 -c "
+import json, sys
+d = json.load(open('$BASELINE'))
+issues = sorted(
+    f\"{f['severity']}:{f['code']}:{f['file_path']}\"
+    for f in d.get('findings', [])
+    if f['severity'] in ('error', 'warning')
+)
+print('\n'.join(issues))
+" 2>/dev/null) || baseline_issues=''
+fi
+
+# Find new issues not in baseline
+new_issues=$(comm -23 <(echo "$current_issues" | sort) <(echo "$baseline_issues" | sort))
+
+if [ -n "$new_issues" ]; then
+  # Write pending message for next session's Start hook
+  count=$(echo "$new_issues" | grep -c . || true)
+  {
+    echo "## claudemap found $count new issue(s) since your last session"
+    echo ""
+    echo "$new_issues" | while IFS=: read -r sev code path; do
+      echo "- **$code** (\`$sev\`) — \`$path\`"
+    done
+    echo ""
+    echo "Say **\"fix CLAUDE.md issues\"** to review and address these, or ignore this message."
+  } > "$PENDING"
+fi
+
+# Update baseline to current state
+echo "$current" > "$BASELINE"

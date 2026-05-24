@@ -19,10 +19,19 @@ type jsonOutput struct {
 }
 
 type jsonAssembly struct {
-	EagerTokenTotal int         `json:"eager_token_total"`
-	EagerLineTotal  int         `json:"eager_line_total"`
-	EagerFiles      []jsonFile  `json:"eager_files"`
-	LazyFiles       []jsonFile  `json:"lazy_files"`
+	EagerTokenTotal int                  `json:"eager_token_total"`
+	EagerLineTotal  int                  `json:"eager_line_total"`
+	EagerFiles      []jsonFile           `json:"eager_files"`
+	LazyFiles       []jsonFile           `json:"lazy_files"`
+	ComposedBlocks  []jsonComposedBlock  `json:"composed_blocks"`
+}
+
+type jsonComposedBlock struct {
+	SourceFile string `json:"source_file"`
+	Scope      string `json:"scope"`
+	LoadOrder  int    `json:"load_order"`
+	Content    string `json:"content"`
+	Tokens     int    `json:"tokens"`
 }
 
 type jsonFile struct {
@@ -74,6 +83,7 @@ func JSON(assembly *model.ContextAssembly, findings []model.Finding) ([]byte, er
 			EagerLineTotal:  assembly.EagerLineTotal,
 			EagerFiles:      toJSONFiles(assembly.EagerFiles),
 			LazyFiles:       toJSONFiles(assembly.LazyFiles),
+			ComposedBlocks:  toJSONComposedBlocks(assembly.ComposedBlocks),
 		},
 		Findings: toJSONFindings(findings),
 		Summary:  toJSONSummary(findings),
@@ -88,6 +98,20 @@ func JSON(assembly *model.ContextAssembly, findings []model.Finding) ([]byte, er
 		out.Findings = []jsonFinding{}
 	}
 	return json.MarshalIndent(out, "", "  ")
+}
+
+func toJSONComposedBlocks(blocks []model.ComposedBlock) []jsonComposedBlock {
+	out := make([]jsonComposedBlock, 0, len(blocks))
+	for _, b := range blocks {
+		out = append(out, jsonComposedBlock{
+			SourceFile: b.Source.Path,
+			Scope:      b.Source.Scope.JSONString(),
+			LoadOrder:  b.Source.LoadOrder,
+			Content:    b.Content,
+			Tokens:     b.Tokens,
+		})
+	}
+	return out
 }
 
 func toJSONFiles(files []model.ClaudeFile) []jsonFile {
