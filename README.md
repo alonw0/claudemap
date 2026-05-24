@@ -94,7 +94,14 @@ Claude will identify genuine conflicts (not surface similarities), state which r
 
 ### Session hooks (opt-in)
 
-Automatically surface new issues at the start of your next session. See [`docs/hooks.md`](docs/hooks.md) for setup.
+Automatically surface new issues at the start of your next session:
+
+```bash
+./scripts/install-hooks                  # current directory
+./scripts/install-hooks ~/myproject      # specific project
+```
+
+The install script merges Stop/Start hooks into `.claude/settings.json`, updates `.gitignore`, and installs the analysis skill — without overwriting any existing hooks. See [`docs/hooks.md`](docs/hooks.md) for manual setup details.
 
 The **stop hook** (`scripts/claudemap-suggest-updates`) baselines findings after each session and writes a pending message if new ERR/WARN issues appear. The **start hook** injects the pending message at the top of the next session.
 

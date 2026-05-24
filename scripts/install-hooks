@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# install-hooks — wire claudemap Stop/Start hooks into a project's Claude Code settings.
+#
+# Usage:
+#   ./scripts/install-hooks                  # installs into current directory
+#   ./scripts/install-hooks ~/myproject      # installs into a specific project
+
+set -euo pipefail
+
+TARGET="${1:-$(pwd)}"
+SETTINGS_DIR="$TARGET/.claude"
+SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+SUGGEST_CMD="claudemap-suggest-updates"
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+green()  { printf '\033[32m%s\033[0m\n' "$*"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
+red()    { printf '\033[31m%s\033[0m\n' "$*"; }
+bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
+
+die() { red "error: $*"; exit 1; }
+
+# ── preflight ─────────────────────────────────────────────────────────────────
+
+[ -d "$TARGET" ] || die "target directory does not exist: $TARGET"
+
+# Resolve script location so we can find the binary and suggest-updates script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Ensure claudemap is built
+if ! command -v claudemap &>/dev/null; then
+  yellow "claudemap not found in PATH — attempting to build..."
+  (cd "$REPO_ROOT" && go build -o claudemap . && echo "  built: $REPO_ROOT/claudemap")
+  SUGGEST_CMD="$REPO_ROOT/scripts/claudemap-suggest-updates"
+  CLAUDEMAP_BIN="$REPO_ROOT/claudemap"
+  yellow "Using local binary. To install globally: sudo cp $CLAUDEMAP_BIN /usr/local/bin/"
+else
+  CLAUDEMAP_BIN="$(command -v claudemap)"
+  green "Found claudemap: $CLAUDEMAP_BIN"
+fi
+
+# Ensure claudemap-suggest-updates is available
+if ! command -v claudemap-suggest-updates &>/dev/null; then
+  SUGGEST_CMD="$REPO_ROOT/scripts/claudemap-suggest-updates"
+  yellow "claudemap-suggest-updates not in PATH — using: $SUGGEST_CMD"
+else
+  SUGGEST_CMD="$(command -v claudemap-suggest-updates)"
+  green "Found claudemap-suggest-updates: $SUGGEST_CMD"
+fi
+
+START_CMD="cat .claude/claudemap-pending.md 2>/dev/null && rm -f .claude/claudemap-pending.md || true"
+
+# ── merge into settings.json ──────────────────────────────────────────────────
+
+mkdir -p "$SETTINGS_DIR"
+
+if [ ! -f "$SETTINGS_FILE" ]; then
+  echo '{}' > "$SETTINGS_FILE"
+fi
+
+# Use python3 to merge — avoids a jq dependency
+python3 - "$SETTINGS_FILE" "$SUGGEST_CMD" "$START_CMD" <<'PYEOF'
+import json, sys
+
+path, stop_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+
+with open(path) as f:
+    s = json.load(f)
+
+hooks = s.setdefault("hooks", {})
+
+# ── Stop hook ────────────────────────────────────────────────────────────────
+stop_hooks = hooks.setdefault("Stop", [])
+stop_entry = {"type": "command", "command": stop_cmd}
+# Check if our command is already present
+already = any(
+    h.get("command") == stop_cmd
+    for group in stop_hooks
+    for h in group.get("hooks", [])
+)
+if not already:
+    stop_hooks.append({"matcher": "", "hooks": [stop_entry]})
+
+# ── Start hook ───────────────────────────────────────────────────────────────
+start_hooks = hooks.setdefault("Start", [])
+already = any(
+    h.get("command") == start_cmd
+    for group in start_hooks
+    for h in group.get("hooks", [])
+)
+if not already:
+    start_hooks.append({"matcher": "", "hooks": [{"type": "command", "command": start_cmd}]})
+
+with open(path, "w") as f:
+    json.dump(s, f, indent=2)
+    f.write("\n")
+
+PYEOF
+
+green "Hooks written to $SETTINGS_FILE"
+
+# ── gitignore ─────────────────────────────────────────────────────────────────
+
+GITIGNORE="$TARGET/.gitignore"
+ENTRIES=(
+  ".claude/claudemap-baseline.json"
+  ".claude/claudemap-pending.md"
+)
+
+added_any=false
+for entry in "${ENTRIES[@]}"; do
+  if [ -f "$GITIGNORE" ] && grep -qxF "$entry" "$GITIGNORE"; then
+    : # already present
+  else
+    echo "$entry" >> "$GITIGNORE"
+    added_any=true
+  fi
+done
+
+if $added_any; then
+  green "Added generated files to $GITIGNORE"
+fi
+
+# ── skill ─────────────────────────────────────────────────────────────────────
+
+SKILL_SRC="$REPO_ROOT/.claude/skills/claudemap-analyze.md"
+SKILL_DST="$HOME/.claude/skills/claudemap-analyze.md"
+
+if [ -f "$SKILL_SRC" ]; then
+  mkdir -p "$HOME/.claude/skills"
+  cp "$SKILL_SRC" "$SKILL_DST"
+  green "Installed skill → $SKILL_DST"
+fi
+
+# ── summary ───────────────────────────────────────────────────────────────────
+
+echo ""
+bold "claudemap hooks installed for: $TARGET"
+echo ""
+echo "  Stop hook  → runs after each session, baselines findings"
+echo "  Start hook → injects pending issues at next session start"
+echo "  Skill      → /skill claudemap-analyze (semantic conflict analysis)"
+echo ""
+yellow "Restart Claude Code for hooks to take effect."

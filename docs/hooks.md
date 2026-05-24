@@ -9,7 +9,22 @@ claudemap can integrate with Claude Code's hook system to automatically surface 
 
 Claude sees the pending message and proactively offers to help fix the issues before you even ask.
 
-## Setup
+## Quick install
+
+From the claudemap repo, run:
+
+```bash
+./scripts/install-hooks                  # install into current directory
+./scripts/install-hooks ~/myproject      # install into a specific project
+```
+
+The script:
+- Builds claudemap if it's not already in PATH
+- Merges the Stop and Start hooks into the project's `.claude/settings.json` (creates it if absent, preserves existing hooks)
+- Adds generated files to `.gitignore`
+- Installs the analysis skill to `~/.claude/skills/`
+
+## Manual setup
 
 ### 1. Make the script available
 
