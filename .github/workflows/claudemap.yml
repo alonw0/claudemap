@@ -1,0 +1,30 @@
+name: claudemap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**CLAUDE.md'
+      - '**CLAUDE.local.md'
+      - '.claude/rules/**'
+  pull_request:
+    paths:
+      - '**CLAUDE.md'
+      - '**CLAUDE.local.md'
+      - '.claude/rules/**'
+
+jobs:
+  check:
+    name: Check CLAUDE.md configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: ./
+        with:
+          workdir: '.'
+          fail-on: 'warning'

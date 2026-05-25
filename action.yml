@@ -1,0 +1,139 @@
+name: 'claudemap'
+description: 'Check CLAUDE.md configuration files for conflicts, broken imports, and other issues'
+author: 'alonw0'
+
+inputs:
+  workdir:
+    description: 'Directory to run claudemap check in (defaults to repo root)'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Minimum severity to fail the action: "error", "warning", or "never"'
+    required: false
+    default: 'warning'
+  version:
+    description: 'claudemap version to install (e.g. "v0.1.0"). Defaults to "latest".'
+    required: false
+    default: 'latest'
+
+outputs:
+  total-findings:
+    description: 'Total number of findings'
+    value: ${{ steps.parse.outputs.total_findings }}
+  errors:
+    description: 'Number of error findings'
+    value: ${{ steps.parse.outputs.errors }}
+  warnings:
+    description: 'Number of warning findings'
+    value: ${{ steps.parse.outputs.warnings }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install claudemap
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        if [ "$VERSION" = "latest" ]; then
+          go install github.com/alonw0/claudemap@latest
+        else
+          go install github.com/alonw0/claudemap@$VERSION
+        fi
+
+    - name: Run claudemap check
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.workdir }}
+      run: |
+        set +e
+        claudemap check --json > "$RUNNER_TEMP/claudemap-output.json"
+        EXIT_CODE=$?
+        set -e
+        echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+    - name: Parse findings and emit annotations
+      id: parse
+      shell: python3 {0}
+      env:
+        RUNNER_TEMP: ${{ runner.temp }}
+        GITHUB_OUTPUT: ${{ github.output }}
+        GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        EXIT_CODE: ${{ steps.check.outputs.exit_code }}
+      run: |
+        import json, os, sys
+
+        output_file = os.path.join(os.environ["RUNNER_TEMP"], "claudemap-output.json")
+        with open(output_file) as f:
+            data = json.load(f)
+
+        findings = data.get("findings", [])
+        summary_data = data.get("summary", {})
+        workdir = data.get("workdir", "")
+
+        # Emit GitHub annotations
+        level_map = {"error": "error", "warning": "warning", "info": "notice"}
+        for finding in findings:
+            level = level_map.get(finding["severity"], "notice")
+            path = finding.get("file_path", "")
+            # Make path relative to workdir for cleaner annotations
+            if workdir and path.startswith(workdir):
+                path = path[len(workdir):].lstrip("/")
+            line = finding.get("line") or 1
+            code = finding.get("code", "")
+            msg = finding.get("message", "")
+            detail = finding.get("detail", "")
+            full_msg = f"[{code}] {msg}"
+            if detail:
+                full_msg += f" — {detail}"
+            print(f"::{level} file={path},line={line}::{full_msg}")
+
+        # Write outputs
+        total = summary_data.get("total_findings", 0)
+        errors = summary_data.get("errors", 0)
+        warnings = summary_data.get("warnings", 0)
+        info = summary_data.get("info", 0)
+
+        github_output = os.environ.get("GITHUB_OUTPUT", "")
+        if github_output:
+            with open(github_output, "a") as f:
+                f.write(f"total_findings={total}\n")
+                f.write(f"errors={errors}\n")
+                f.write(f"warnings={warnings}\n")
+
+        # Write job summary
+        summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "")
+        if summary_file:
+            version = data.get("claudemap_version", "")
+            lines = [f"## claudemap {version}\n"]
+            if total == 0:
+                lines.append("✅ **No issues found** — CLAUDE.md configuration looks clean.\n")
+            else:
+                status = "🔴" if errors > 0 else "🟡"
+                lines.append(f"{status} **{total} finding(s):** {errors} error(s), {warnings} warning(s), {info} info\n")
+                lines.append("\n| Severity | Code | File | Line | Message |\n")
+                lines.append("|----------|------|------|------|---------|\n")
+                sev_icon = {"error": "🔴", "warning": "🟡", "info": "ℹ️"}
+                for finding in findings:
+                    icon = sev_icon.get(finding["severity"], "")
+                    path = finding.get("file_path", "")
+                    if workdir and path.startswith(workdir):
+                        path = path[len(workdir):].lstrip("/")
+                    line = finding.get("line") or ""
+                    code = finding.get("code", "")
+                    msg = finding.get("message", "").replace("|", "\\|")
+                    lines.append(f"| {icon} {finding['severity']} | `{code}` | `{path}` | {line} | {msg} |\n")
+            with open(summary_file, "a") as f:
+                f.writelines(lines)
+
+        # Determine whether to fail
+        fail_on = os.environ.get("FAIL_ON", "warning")
+        if fail_on == "never":
+            sys.exit(0)
+        elif fail_on == "error" and errors > 0:
+            sys.exit(2)
+        elif fail_on == "warning" and (errors > 0 or warnings > 0):
+            sys.exit(2)
+        else:
+            sys.exit(0)

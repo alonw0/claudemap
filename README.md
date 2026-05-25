@@ -105,6 +105,43 @@ The install script merges Stop/Start hooks into `.claude/settings.json`, updates
 
 The **stop hook** (`scripts/claudemap-suggest-updates`) baselines findings after each session and writes a pending message if new ERR/WARN issues appear. The **start hook** injects the pending message at the top of the next session.
 
+## GitHub Action / CI
+
+claudemap ships as a reusable GitHub Action. Add it to any repo to check CLAUDE.md hygiene on every PR that touches memory files:
+
+```yaml
+# .github/workflows/claudemap.yml
+name: claudemap
+on:
+  pull_request:
+    paths: ['**CLAUDE.md', '**CLAUDE.local.md', '.claude/rules/**']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: alonw0/claudemap@main
+        with:
+          fail-on: 'warning'   # or 'error' to allow warnings through
+```
+
+**Inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `workdir` | `.` | Directory to run `claudemap check` in |
+| `fail-on` | `warning` | Minimum severity to fail: `error`, `warning`, or `never` |
+| `version` | `latest` | claudemap version to install |
+
+**What you get:**
+- Inline PR annotations on the exact lines with issues
+- A job summary table with all findings
+- Exit code 0 (clean), 2 (findings above threshold)
+
 ## JSON output schema
 
 `claudemap check --json` produces:
