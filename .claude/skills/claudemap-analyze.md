@@ -11,7 +11,12 @@ description: Analyze CLAUDE.md configuration for rule conflicts, scope leakage, 
    ```
    If the command is not found, tell the user: "claudemap is not installed or not in PATH. Build it with `go build -o claudemap .` from the project root."
 
-2. Parse the JSON output. If it contains ERROR findings (broken imports, circular symlinks), surface those first:
+2. Parse the JSON output. Before surfacing any ERROR findings, **verify them against `assembly.composed_blocks`**:
+
+   - For each **E01 broken-import** finding: find the source file in `composed_blocks` and check whether the `@path` reference appears inside backticks (`` `@path` ``) or a fenced code block. If so, it is a **false positive** — claudemap's import scanner has a known bug where it matches `@` references inside code spans. Note it as a scanner false positive rather than a real error, and recommend the bug be fixed in `discover/imports.go`.
+   - For other structural errors (E02 import-depth, W03 circular-import, W04 circular-symlink): surface them as real.
+
+   After verification, if any *genuine* structural errors remain, say:
    > "claudemap found structural errors that should be fixed before semantic analysis: [list them]. Should I help fix these first, or proceed with the full analysis anyway?"
 
 3. Extract `assembly.composed_blocks` (the full text each block contributes, in load order) and `findings` from the JSON. Proceed with the analysis below.
