@@ -4,11 +4,18 @@ A zero-network, read-only CLI that makes Claude Code's assembled CLAUDE.md conte
 
 ## Install
 
+**Homebrew (macOS / Linux):**
+```bash
+brew tap alonw0/claudemap
+brew install claudemap
+```
+
+**Go install:**
 ```bash
 go install github.com/alonw0/claudemap@latest
 ```
 
-Or build from source:
+**Build from source:**
 ```bash
 git clone https://github.com/alonw0/claudemap
 cd claudemap
