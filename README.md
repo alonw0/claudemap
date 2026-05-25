@@ -85,14 +85,15 @@ claudemap check --report html --output report.html
 
 ### Analysis skill
 
-The `.claude/skills/claudemap-analyze.md` skill brings semantic analysis inside Claude Code. It runs `claudemap check --json`, reads the full composed context, and reasons about rule conflicts, scope leakage, and ordering surprises.
+The `claudemap-analyze` skill brings semantic analysis inside Claude Code. It runs `claudemap check --json`, reads the full composed context, and reasons about rule conflicts, scope leakage, and ordering surprises.
 
-Install:
+Install and activate in one command:
 ```bash
-cp .claude/skills/claudemap-analyze.md ~/.claude/skills/
+claudemap install --skill           # install to ~/.claude/skills/ (global)
+claudemap install --skill --local   # install to .claude/skills/ (project)
 ```
 
-Use in any Claude Code session:
+Then in any Claude Code session:
 ```
 /skill claudemap-analyze
 ```
@@ -101,7 +102,7 @@ Claude will identify genuine conflicts (not surface similarities), state which r
 
 ### Install skill and hooks
 
-The fastest way to set up semantic analysis and session hooks is the built-in install command:
+`claudemap install` sets up both the skill and session hooks in one step:
 
 ```bash
 claudemap install                   # skill globally + hooks in current project
@@ -115,20 +116,15 @@ This writes the skill to the chosen location and merges the Stop/Start hooks int
 
 ### Session hooks (opt-in)
 
-Automatically surface new issues at the start of your next session:
+Automatically surface new issues at the start of your next session. The **stop hook** runs `claudemap suggest-updates` after each session: it baselines findings and writes a pending message if new ERR/WARN issues appear. The **start hook** injects that message at the top of the next session so Claude proactively offers to fix them.
 
-```bash
-./scripts/install-hooks                  # current directory
-./scripts/install-hooks ~/myproject      # specific project
-```
-
-The install script merges Stop/Start hooks into `.claude/settings.json`, updates `.gitignore`, and installs the analysis skill — without overwriting any existing hooks. See [`docs/hooks.md`](docs/hooks.md) for manual setup details.
-
-The **stop hook** (`scripts/claudemap-suggest-updates`) baselines findings after each session and writes a pending message if new ERR/WARN issues appear. The **start hook** injects the pending message at the top of the next session.
+Set up with `claudemap install --hooks` (above), or see [`docs/hooks.md`](docs/hooks.md) for manual setup.
 
 ## GitHub Action / CI
 
-claudemap ships as a reusable GitHub Action. Add it to any repo to check CLAUDE.md hygiene on every PR that touches memory files:
+claudemap ships as a reusable GitHub Action. Add it to any repo to check CLAUDE.md hygiene on every PR that touches memory files.
+
+### Structural check only
 
 ```yaml
 # .github/workflows/claudemap.yml
@@ -162,6 +158,85 @@ jobs:
 - Inline PR annotations on the exact lines with issues
 - A job summary table with all findings
 - Exit code 0 (clean), 2 (findings above threshold)
+
+### Full CI: structural + semantic conflict analysis
+
+Add a second parallel job that pipes the composed context to Claude for semantic analysis — catching rule conflicts, scope leakage, and ordering surprises that structural checks can't detect. The semantic job is advisory: it posts findings to the job summary but never blocks the PR.
+
+Requires an `ANTHROPIC_API_KEY` repo secret.
+
+```yaml
+# .github/workflows/claudemap.yml
+name: claudemap
+on:
+  pull_request:
+    paths: ['**CLAUDE.md', '**CLAUDE.local.md', '.claude/rules/**']
+
+jobs:
+  # Structural check — fails on broken imports, circular refs, oversized files, etc.
+  structural:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: alonw0/claudemap@main
+        with:
+          fail-on: 'warning'
+
+  # Semantic analysis — advisory, posts to job summary, never blocks merge
+  semantic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install claudemap and Claude Code CLI
+        run: |
+          go install github.com/alonw0/claudemap@latest
+          npm install -g @anthropic-ai/claude-code --quiet
+      - name: Analyze for rule conflicts
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claudemap check --json > /tmp/cm.json
+          python3 - <<'EOF'
+          import json, subprocess, sys, os
+
+          with open('/tmp/cm.json') as f:
+              data = json.load(f)
+
+          blocks = data["assembly"]["composed_blocks"]
+          findings = data["findings"]
+
+          prompt = (
+              "Analyze this Claude Code project's assembled CLAUDE.md configuration.\n\n"
+              "Load order matters: higher load-order numbers win when rules conflict.\n\n"
+              "Flag only genuine issues:\n"
+              "- CONFLICT: two rules giving opposite instructions for the same situation\n"
+              "- SCOPE: personal preference that belongs in ~/.claude/CLAUDE.md\n"
+              "- ORDERING: a rule silently overridden by a later-loading file\n"
+              "- OVERSPEC: a broad-file rule that belongs in a scoped .claude/rules/ file\n\n"
+              "If no genuine issues exist, say so clearly. Do not manufacture findings.\n\n"
+              "<context>\n" + json.dumps(blocks, indent=2) + "\n</context>\n\n"
+              "<structural_findings>\n" + json.dumps(findings, indent=2) + "\n</structural_findings>"
+          )
+
+          result = subprocess.run(["claude", "-p", prompt], capture_output=True, text=True)
+          output = result.stdout.strip() or result.stderr.strip()
+          print(output)
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY", "")
+          if summary:
+              with open(summary, "a") as f:
+                  f.write("## Semantic analysis\n\n")
+                  f.write(output + "\n")
+          EOF
 
 ## JSON output schema
 

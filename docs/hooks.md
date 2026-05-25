@@ -4,41 +4,24 @@ claudemap can integrate with Claude Code's hook system to automatically surface 
 
 ## How it works
 
-1. **Stop hook** — runs `scripts/claudemap-suggest-updates` after every session. If new ERR or WARN findings appeared since the last run, it writes a short message to `.claude/claudemap-pending.md`.
+1. **Stop hook** — runs `claudemap suggest-updates` after every session. If new ERR or WARN findings appeared since the last run, it writes a short message to `.claude/claudemap-pending.md`.
 2. **Start hook** — reads `.claude/claudemap-pending.md` at the beginning of the next session and injects it as context, then deletes the file.
 
 Claude sees the pending message and proactively offers to help fix the issues before you even ask.
 
 ## Quick install
 
-From the claudemap repo, run:
-
 ```bash
-./scripts/install-hooks                  # install into current directory
-./scripts/install-hooks ~/myproject      # install into a specific project
+claudemap install --hooks           # hooks into current project's .claude/settings.json
+claudemap install --hooks --global  # hooks into ~/.claude/settings.json
+claudemap install                   # hooks + skill in one step
 ```
 
-The script:
-- Builds claudemap if it's not already in PATH
-- Merges the Stop and Start hooks into the project's `.claude/settings.json` (creates it if absent, preserves existing hooks)
-- Adds generated files to `.gitignore`
-- Installs the analysis skill to `~/.claude/skills/`
+`claudemap install` merges the Stop and Start hooks into `settings.json` (creates it if absent, preserves existing hooks), adds generated files to `.gitignore`, and optionally installs the analysis skill. Restart Claude Code afterward.
 
 ## Manual setup
 
-### 1. Make the script available
-
-Either install globally:
-```bash
-# build claudemap first
-go build -o claudemap .
-sudo cp claudemap /usr/local/bin/
-sudo cp scripts/claudemap-suggest-updates /usr/local/bin/
-```
-
-Or use the project-relative path in the hook command (see below).
-
-### 2. Add hooks to `.claude/settings.json`
+### 1. Add hooks to `.claude/settings.json`
 
 ```json
 {
@@ -49,14 +32,11 @@ Or use the project-relative path in the hook command (see below).
         "hooks": [
           {
             "type": "command",
-            "command": "claudemap-suggest-updates"
+            "command": "claudemap suggest-updates"
           }
         ]
       }
     ],
-    "PostToolUse": [],
-    "PreToolUse": [],
-    "Notification": [],
     "Start": [
       {
         "matcher": "",
@@ -72,12 +52,7 @@ Or use the project-relative path in the hook command (see below).
 }
 ```
 
-If `claudemap-suggest-updates` is not in your PATH, use the full path:
-```json
-"command": "/path/to/claudemap/scripts/claudemap-suggest-updates"
-```
-
-### 3. Add generated files to `.gitignore`
+### 2. Add generated files to `.gitignore`
 
 ```
 .claude/claudemap-baseline.json
@@ -89,7 +64,7 @@ If `claudemap-suggest-updates` is not in your PATH, use the full path:
 To run a full semantic analysis of your CLAUDE.md setup (conflict detection, scope leakage, ordering surprises), install the skill:
 
 ```bash
-cp .claude/skills/claudemap-analyze.md ~/.claude/skills/
+claudemap install --skill
 ```
 
 Then in any Claude Code session:

@@ -2,6 +2,10 @@ name: 'claudemap'
 description: 'Check CLAUDE.md configuration files for conflicts, broken imports, and other issues'
 author: 'alonw0'
 
+branding:
+  icon: 'map'
+  color: 'blue'
+
 inputs:
   workdir:
     description: 'Directory to run claudemap check in (defaults to repo root)'
