@@ -99,6 +99,20 @@ Use in any Claude Code session:
 
 Claude will identify genuine conflicts (not surface similarities), state which rule wins for each ordering issue, and propose minimal targeted fixes — asking for confirmation before making any change.
 
+### Install skill and hooks
+
+The fastest way to set up semantic analysis and session hooks is the built-in install command:
+
+```bash
+claudemap install                   # skill globally + hooks in current project
+claudemap install --skill           # skill only (~/.claude/skills/)
+claudemap install --skill --local   # skill in ./.claude/skills/
+claudemap install --hooks           # hooks only (current project)
+claudemap install --hooks --global  # hooks in ~/.claude/settings.json
+```
+
+This writes the skill to the chosen location and merges the Stop/Start hooks into `settings.json` — no external scripts or Python required. Restart Claude Code afterward.
+
 ### Session hooks (opt-in)
 
 Automatically surface new issues at the start of your next session:
