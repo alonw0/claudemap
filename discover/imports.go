@@ -11,6 +11,17 @@ import (
 
 var importRe = regexp.MustCompile(`@([^\s]+)`)
 
+// isInsideBackticks reports whether position pos in line falls inside a backtick code span.
+func isInsideBackticks(line string, pos int) bool {
+	count := 0
+	for i := 0; i < pos && i < len(line); i++ {
+		if line[i] == '`' {
+			count++
+		}
+	}
+	return count%2 == 1
+}
+
 func resolveImports(filePath, rawContent string, depth int, seen map[string]bool) []model.ImportRef {
 	var refs []model.ImportRef
 	lines := strings.Split(rawContent, "\n")
@@ -26,6 +37,9 @@ func resolveImports(filePath, rawContent string, depth int, seen map[string]bool
 
 		matches := importRe.FindAllStringSubmatchIndex(line, -1)
 		for _, m := range matches {
+			if isInsideBackticks(line, m[0]) {
+				continue
+			}
 			raw := line[m[2]:m[3]]
 			ref := model.ImportRef{
 				Raw:   raw,
