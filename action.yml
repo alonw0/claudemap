@@ -61,8 +61,6 @@ runs:
       shell: python3 {0}
       env:
         RUNNER_TEMP: ${{ runner.temp }}
-        GITHUB_OUTPUT: ${{ github.output }}
-        GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
         FAIL_ON: ${{ inputs.fail-on }}
         EXIT_CODE: ${{ steps.check.outputs.exit_code }}
       run: |

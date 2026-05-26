@@ -78,8 +78,12 @@ func runSuggestUpdates(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Write pending message if there are new issues
+	// Write pending message if there are new issues.
+	// Only advance the baseline if the notification was successfully delivered —
+	// if the write fails, keep the baseline stale so the next session retries.
+	notified := true
 	if len(newIssues) > 0 {
+		notified = false
 		if err := os.MkdirAll(filepath.Dir(pendingPath), 0755); err == nil {
 			var sb strings.Builder
 			fmt.Fprintf(&sb, "## claudemap found %d new issue(s) since your last session\n\n", len(newIssues))
@@ -90,13 +94,16 @@ func runSuggestUpdates(_ *cobra.Command, _ []string) error {
 				}
 			}
 			sb.WriteString("\nSay **\"fix CLAUDE.md issues\"** to review and address these, or ignore this message.\n")
-			_ = os.WriteFile(pendingPath, []byte(sb.String()), 0644)
+			if err := os.WriteFile(pendingPath, []byte(sb.String()), 0644); err == nil {
+				notified = true
+			}
 		}
 	}
 
-	// Always update baseline to current state
-	_ = os.MkdirAll(filepath.Dir(baselinePath), 0755)
-	_ = os.WriteFile(baselinePath, currentJSON, 0644)
+	if notified {
+		_ = os.MkdirAll(filepath.Dir(baselinePath), 0755)
+		_ = os.WriteFile(baselinePath, currentJSON, 0644)
+	}
 
 	return nil
 }
