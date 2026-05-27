@@ -1,5 +1,7 @@
 # claudemap
 
+![claudemap](docs/assets/hero.png)
+
 [![CI](https://github.com/alonw0/claudemap/actions/workflows/claudemap.yml/badge.svg)](https://github.com/alonw0/claudemap/actions/workflows/claudemap.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/alonw0/claudemap.svg)](https://pkg.go.dev/github.com/alonw0/claudemap)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
