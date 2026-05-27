@@ -1,6 +1,12 @@
 # claudemap
 
-A zero-network, read-only CLI that makes Claude Code's assembled CLAUDE.md context visible. See exactly what files load, in what order, how many tokens they consume, and whether any structural or semantic issues exist.
+[![CI](https://github.com/alonw0/claudemap/actions/workflows/claudemap.yml/badge.svg)](https://github.com/alonw0/claudemap/actions/workflows/claudemap.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/alonw0/claudemap.svg)](https://pkg.go.dev/github.com/alonw0/claudemap)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+**Visibility into the CLAUDE.md context Claude Code actually loads.**
+
+claudemap is a read-only CLI that walks your project directory the same way Claude Code does, assembles the full context, and shows you exactly which files load, in what order, how many tokens each consumes, and whether any structural or semantic issues exist — all without a network call.
 
 ## Install
 
@@ -26,7 +32,7 @@ go build -o claudemap .
 
 ### `claudemap map`
 
-Shows the full context tree for the current directory — what Claude loads eagerly at session start, what loads lazily, and any structural issues.
+Renders the full context tree for the current directory: what loads eagerly at session start, what loads lazily based on which file you open, load order, line and token counts, and any structural issues.
 
 ```
 claudemap map
@@ -38,7 +44,7 @@ claudemap map --report html                        # open interactive HTML repor
 
 ### `claudemap check`
 
-Runs all issue detectors and reports findings.
+Runs all issue detectors and reports findings. Use this in CI or as a pre-push check.
 
 ```
 claudemap check
@@ -52,6 +58,8 @@ claudemap check --report html --output report.html
 
 ## Issue detectors
 
+claudemap detects nine classes of issues that cause silent misbehavior in Claude Code:
+
 | Code | Severity | Description |
 |------|----------|-------------|
 | E01 | error | Broken `@import` — file not found |
@@ -60,34 +68,35 @@ claudemap check --report html --output report.html
 | W02 | warning | Path-scoped rule matches no files in the tree |
 | W03 | warning | Circular `@import` detected |
 | W04 | warning | Circular symlink in `.claude/rules/` |
-| I01 | info | File approaching 200-line limit (≥150 lines) |
+| I01 | info | File approaching 200-line limit (>=150 lines) |
 | I02 | info | Lazy-dir file not duplicated in eager context (vanishes after `/compact`) |
 | I03 | info | `claudeMdExcludes` pattern in settings matches no discovered files |
 
 ## HTML report
 
-`claudemap map --report html` or `claudemap check --report html` generates a self-contained HTML file (no external dependencies, works at `file://`).
+`claudemap map --report html` or `claudemap check --report html` generates a self-contained, single-file HTML report — no server, no external dependencies, works at `file://`.
 
-**Views:**
+**Five views:**
+
 - **Overview** — health status, key metrics, token distribution bar, findings summary
-- **Context Map** — proportional treemap of eager files by token weight; lazy files as pills below
+- **Context Map** — proportional treemap of eager files by token weight; lazy files listed below
 - **Context Tree** — full file tree with load order, scope, timing, line/token counts, import chains, and per-file finding indicators
-- **Composed Context** — three modes:
-  - **Blocks** — collapsible accordion per file
-  - **Eager** — all eager files concatenated in load order with sticky file headers and line numbers
-  - **All** — eager + lazy concatenated, separated by section headers
-  - **Copy all** button copies clean text (without line numbers) to clipboard
+- **Composed Context** — the full text Claude sees, in three modes:
+  - *Blocks* — collapsible accordion, one section per file
+  - *Eager* — all eager files concatenated in load order with sticky headers and line numbers
+  - *All* — eager + lazy concatenated with section separators
+  - *Copy All* copies clean text (no line numbers) to clipboard
 - **Findings** — all findings with full detail, filterable by severity
 
-**Theme:** light / system / dark toggle, persisted to `localStorage`.
+Theme: light / system / dark, persisted to `localStorage`.
 
-## Phase 2: Semantic analysis
+## Semantic analysis
 
-### Analysis skill
+### claudemap-analyze skill
 
-The `claudemap-analyze` skill brings semantic analysis inside Claude Code. It runs `claudemap check --json`, reads the full composed context, and reasons about rule conflicts, scope leakage, and ordering surprises.
+The `claudemap-analyze` Claude Code skill extends structural analysis with semantic reasoning. It runs `claudemap check --json`, reads the full composed context, and asks Claude to identify rule conflicts, scope leakage, and ordering surprises — things structural checks cannot catch.
 
-Install and activate in one command:
+Install in one step:
 ```bash
 claudemap install --skill           # install to ~/.claude/skills/ (global)
 claudemap install --skill --local   # install to .claude/skills/ (project)
@@ -98,12 +107,13 @@ Then in any Claude Code session:
 /skill claudemap-analyze
 ```
 
-Claude will identify genuine conflicts (not surface similarities), state which rule wins for each ordering issue, and propose minimal targeted fixes — asking for confirmation before making any change.
+Claude identifies genuine conflicts (not surface similarities), states which rule wins for each ordering issue, and proposes minimal targeted fixes — asking for confirmation before changing anything.
 
-### Install skill and hooks
+### Session hooks
 
-`claudemap install` sets up both the skill and session hooks in one step:
+Automatically surface new issues at the start of your next session. The **stop hook** runs `claudemap suggest-updates` after each session: it baselines the current findings and writes a pending note if new errors or warnings have appeared. The **start hook** injects that note at the top of the next session so Claude proactively offers to fix them.
 
+Set up everything — skill and hooks — in one command:
 ```bash
 claudemap install                   # skill globally + hooks in current project
 claudemap install --skill           # skill only (~/.claude/skills/)
@@ -112,19 +122,13 @@ claudemap install --hooks           # hooks only (current project)
 claudemap install --hooks --global  # hooks in ~/.claude/settings.json
 ```
 
-This writes the skill to the chosen location and merges the Stop/Start hooks into `settings.json` — no external scripts or Python required. Restart Claude Code afterward.
-
-### Session hooks (opt-in)
-
-Automatically surface new issues at the start of your next session. The **stop hook** runs `claudemap suggest-updates` after each session: it baselines findings and writes a pending message if new ERR/WARN issues appear. The **start hook** injects that message at the top of the next session so Claude proactively offers to fix them.
-
-Set up with `claudemap install --hooks` (above), or see [`docs/hooks.md`](docs/hooks.md) for manual setup.
+See [`docs/hooks.md`](docs/hooks.md) for manual setup.
 
 ## GitHub Action / CI
 
-claudemap ships as a reusable GitHub Action. Add it to any repo to check CLAUDE.md hygiene on every PR that touches memory files.
+claudemap ships as a reusable GitHub Action. Add it to any repo to enforce CLAUDE.md hygiene on every pull request.
 
-### Structural check only
+### Structural check
 
 ```yaml
 # .github/workflows/claudemap.yml
@@ -157,11 +161,11 @@ jobs:
 **What you get:**
 - Inline PR annotations on the exact lines with issues
 - A job summary table with all findings
-- Exit code 0 (clean), 2 (findings above threshold)
+- Exit code 0 (clean) or 2 (findings above threshold)
 
-### Full CI: structural + semantic conflict analysis
+### Structural + semantic (full CI)
 
-Add a second parallel job that pipes the composed context to Claude for semantic analysis — catching rule conflicts, scope leakage, and ordering surprises that structural checks can't detect. The semantic job is advisory: it posts findings to the job summary but never blocks the PR.
+A second parallel job pipes the composed context to Claude for semantic analysis — catching rule conflicts, scope leakage, and ordering surprises that structural checks miss. The semantic job is advisory: it posts findings to the job summary but never blocks a merge.
 
 Requires an `ANTHROPIC_API_KEY` repo secret.
 
@@ -173,7 +177,6 @@ on:
     paths: ['**CLAUDE.md', '**CLAUDE.local.md', '.claude/rules/**']
 
 jobs:
-  # Structural check — fails on broken imports, circular refs, oversized files, etc.
   structural:
     runs-on: ubuntu-latest
     steps:
@@ -185,7 +188,6 @@ jobs:
         with:
           fail-on: 'warning'
 
-  # Semantic analysis — advisory, posts to job summary, never blocks merge
   semantic:
     runs-on: ubuntu-latest
     steps:
@@ -237,6 +239,7 @@ jobs:
                   f.write("## Semantic analysis\n\n")
                   f.write(output + "\n")
           EOF
+```
 
 ## JSON output schema
 
@@ -267,4 +270,4 @@ jobs:
 }
 ```
 
-`composed_blocks` contains the full text of each eager file in load order — the complete context Claude receives at session start.
+`composed_blocks` contains the full text of each eager file in load order — the exact context Claude receives at session start.
