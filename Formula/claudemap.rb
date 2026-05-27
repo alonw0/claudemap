@@ -2,7 +2,7 @@ class Claudemap < Formula
   desc "Visualize and analyze Claude Code's CLAUDE.md context assembly"
   homepage "https://github.com/alonw0/claudemap"
   url "https://github.com/alonw0/claudemap/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
+  sha256 "63a00c76b4ef2abe2f6bbb1fca775e618c95b228b290c17136f8f6ac48fa15c7"
   license "MIT"
   head "https://github.com/alonw0/claudemap.git", branch: "main"
 
